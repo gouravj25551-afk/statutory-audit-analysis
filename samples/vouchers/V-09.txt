@@ -1,0 +1,12 @@
+Payment Voucher
+Voucher No: V-09
+Voucher Date: 05-May-2024
+Transaction Date: 15-Apr-2024
+Description: Travel reimbursement for official audit assignment
+Nature: Travel and conveyance
+Employee: Anjali Bose
+Department: Finance
+Amount: Rs. 9,500.00
+Approved by: Manager Suresh Rao
+Approval Date: 05-May-2024
+Enclosed: Original travel bills and tickets attached

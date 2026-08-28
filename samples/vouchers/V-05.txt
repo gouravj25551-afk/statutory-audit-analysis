@@ -1,0 +1,14 @@
+Payment Voucher
+Voucher No: V-05
+Voucher Date: 06-Jun-2024
+Transaction Date: 05-Jun-2024
+Invoice Date: 05-Jun-2024
+Description: Purchase of laptop asset for engineering team
+Nature: Capital expenditure
+Vendor: TechWorld Systems Pvt Ltd
+Department: IT
+Amount: Rs. 45,000.00
+Approved by: CFO Ramesh Gupta
+Approval Date: 04-Jun-2024
+Invoice No: TW-2291
+Enclosed: Purchase order and vendor invoice attached

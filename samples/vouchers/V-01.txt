@@ -1,0 +1,12 @@
+Payment Voucher
+Voucher No: V-01
+Voucher Date: 20-Apr-2024
+Transaction Date: 02-Apr-2024
+Description: Travel reimbursement for official duty visit to Mumbai
+Nature: Travel and conveyance
+Employee: Rahul Sharma
+Department: Operations
+Amount: Rs. 12,500.00
+Approved by: Team Lead Anil Kumar
+Approval Date: 25-Apr-2024
+Enclosed: Travel bills and tickets attached

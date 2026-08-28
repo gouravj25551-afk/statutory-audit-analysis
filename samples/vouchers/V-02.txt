@@ -1,0 +1,12 @@
+Payment Voucher
+Voucher No: V-02
+Voucher Date: 08-Apr-2024
+Transaction Date: 03-Apr-2024
+Description: Travel reimbursement for official client meeting at Pune
+Nature: Travel and conveyance
+Employee: Priya Nair
+Department: Sales
+Amount: Rs. 8,000.00
+Approved by: Manager Suresh Rao
+Approval Date: 04-Apr-2024
+Enclosed: Original travel bills attached

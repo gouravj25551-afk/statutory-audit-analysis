@@ -1,0 +1,11 @@
+Payment Voucher
+Voucher No: V-08
+Voucher Date: 09-Jul-2024
+Transaction Date: 09-Jul-2024
+Description: Purchase of office stationery and printer paper
+Nature: Office supplies
+Vendor: Daily Needs Stationers
+Department: Administration
+Amount: Rs. 2,000.00
+Approved by: Admin Officer Neha Jain
+Approval Date: 09-Jul-2024

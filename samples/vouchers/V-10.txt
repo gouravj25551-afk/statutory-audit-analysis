@@ -1,0 +1,10 @@
+Payment Voucher
+Voucher No: V-10
+Voucher Date: 24-May-2024
+Transaction Date: 23-May-2024
+Description: Client entertainment lunch with existing customer
+Nature: Entertainment expense
+Employee: Rohan Kapoor
+Department: Sales
+Amount: Rs. 3,000.00
+Enclosed: Restaurant bill attached

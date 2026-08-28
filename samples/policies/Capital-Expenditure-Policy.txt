@@ -1,0 +1,9 @@
+Capital Expenditure Policy
+Policy Name: Capital Expenditure Policy
+Effective Date: 01-Apr-2024
+Scope: Applicable to capital purchases of fixed assets and equipment.
+
+1. Eligibility: Capital expenditure covers purchase of assets such as laptops, machinery and equipment.
+2. Amount Limit: Any single capital purchase shall not exceed Rs. 1,00,000 without board sanction.
+3. Approval: Capital purchases must be approved by the CFO.
+4. Supporting Documents: Every asset purchase must be supported by a purchase order and a vendor invoice.

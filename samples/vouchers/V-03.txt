@@ -1,0 +1,12 @@
+Payment Voucher
+Voucher No: V-03
+Voucher Date: 12-May-2024
+Transaction Date: 11-May-2024
+Description: Client entertainment dinner for prospective customer
+Nature: Entertainment expense
+Employee: Vikram Mehta
+Department: Sales
+Amount: Rs. 4,500.00
+Approved by: Director Kavita Menon
+Approval Date: 12-May-2024
+Enclosed: Itemised restaurant bill attached

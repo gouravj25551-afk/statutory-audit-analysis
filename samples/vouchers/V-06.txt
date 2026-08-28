@@ -1,0 +1,14 @@
+Payment Voucher
+Voucher No: V-06
+Voucher Date: 14-Jun-2024
+Transaction Date: 13-Jun-2024
+Invoice Date: 13-Jun-2024
+Description: Purchase of office machinery equipment asset
+Nature: Capital expenditure
+Vendor: Industrial Equipments Co
+Department: Facilities
+Amount: Rs. 60,000.00
+Approved by: Manager Suresh Rao
+Approval Date: 14-Jun-2024
+Invoice No: IE-5540
+Enclosed: Vendor invoice attached
