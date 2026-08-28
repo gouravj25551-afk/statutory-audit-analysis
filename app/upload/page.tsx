@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PageHeader, StatusBadge } from "@/components/ui";
 
-const ACCEPT = ".pdf,.docx,.txt,.csv,.md,.json";
+const ACCEPT = ".pdf,.docx,.txt,.csv,.md,.json,.png,.jpg,.jpeg,.webp,.bmp,.tiff,.tif";
 
 export default function UploadPage() {
   const {
@@ -21,7 +21,7 @@ export default function UploadPage() {
     <>
       <PageHeader
         title="Upload Documents"
-        subtitle="Upload the vouchers and the policies. Files are read in your browser only — nothing is sent to any server. Supported: PDF, DOCX, TXT, CSV."
+        subtitle="Upload the vouchers and the policies. Files are read in your browser only — nothing is sent to any server. Supported: PDF, DOCX, TXT, CSV and scanned/image files (auto-OCR)."
         actions={
           (vouchers.length > 0 || policies.length > 0) && (
             <button
@@ -121,8 +121,9 @@ export default function UploadPage() {
       </div>
 
       <p className="mt-5 text-xs text-slate-400">
-        Tip: text-based PDFs and DOCX extract best. Scanned/image-only PDFs contain no selectable
-        text and will report an extraction failure — re-save them as a text PDF or upload a TXT copy.
+        Tip: text-based PDFs and DOCX extract instantly. Scanned or image-only PDFs (and photo /
+        image uploads) are read automatically with in-browser OCR — this can take a few seconds per
+        page, so a scanned file may sit on “Processing…” for a moment before it finishes.
       </p>
     </>
   );
@@ -190,7 +191,7 @@ function DropCard({
         <div className="mt-1 text-sm font-medium text-slate-700">
           {busy ? "Reading files…" : "Drag & drop or click to browse"}
         </div>
-        <div className="text-xs text-slate-400">PDF · DOCX · TXT · CSV — multiple files allowed</div>
+        <div className="text-xs text-slate-400">PDF · DOCX · TXT · CSV · scanned PDF / image — multiple files allowed</div>
         <input
           ref={inputRef}
           type="file"

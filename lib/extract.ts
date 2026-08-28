@@ -31,6 +31,10 @@ export async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".pdf")) return pdfToText(file);
   if (name.endsWith(".docx")) return docxToText(file);
+  if (/\.(png|jpe?g|webp|bmp|gif|tiff?)$/.test(name) || file.type.startsWith("image/")) {
+    // A photographed / scanned document uploaded as an image — read it with OCR.
+    return ocrImage(file);
+  }
   if (
     name.endsWith(".txt") ||
     name.endsWith(".csv") ||
@@ -43,7 +47,7 @@ export async function fileToText(file: File): Promise<string> {
   const text = await file.text();
   if (text && /[a-z0-9]/i.test(text)) return text;
   throw new Error(
-    "Unsupported file type. Please upload a PDF, DOCX, or TXT/CSV file."
+    "Unsupported file type. Please upload a PDF, DOCX, image, or TXT/CSV file."
   );
 }
 
@@ -71,7 +75,61 @@ async function pdfToText(file: File): Promise<string> {
     if (line.trim()) parts.push(line.trim());
     parts.push(""); // page break
   }
-  return parts.join("\n").replace(/\n{3,}/g, "\n\n");
+  const text = parts.join("\n").replace(/\n{3,}/g, "\n\n");
+
+  // If the PDF has a real text layer, use it. Otherwise it is a scanned /
+  // image-only PDF — render each page and OCR it (still 100% in-browser).
+  if (text.replace(/\s/g, "").length >= 20) return text;
+  return ocrPdf(doc);
+}
+
+// ---- OCR (scanned PDFs & image uploads) -----------------------------------
+//
+// OCR only converts the pixels of the uploaded document into text. It adds no
+// outside information — the document itself remains the sole source.
+
+async function makeOcrWorker(): Promise<any> {
+  const Tesseract: any = await import("tesseract.js");
+  // Self-hosted worker + core (served from /public/ocr) so OCR does not depend
+  // on any third-party CDN. Only the language model is pulled from Tesseract's
+  // canonical data host. oem = 1 selects the LSTM engine (the -lstm cores).
+  return Tesseract.createWorker("eng", 1, {
+    workerPath: "/ocr/worker.min.js",
+    corePath: "/ocr",
+    langPath: "https://tessdata.projectnaptha.com/4.0.0",
+  });
+}
+
+async function ocrPdf(doc: any): Promise<string> {
+  const worker = await makeOcrWorker();
+  try {
+    const out: string[] = [];
+    for (let p = 1; p <= doc.numPages; p += 1) {
+      const page = await doc.getPage(p);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const { data } = await worker.recognize(canvas);
+      if (data?.text) out.push(data.text.trim());
+    }
+    return out.join("\n\n").replace(/\n{3,}/g, "\n\n");
+  } finally {
+    await worker.terminate();
+  }
+}
+
+async function ocrImage(file: File): Promise<string> {
+  const worker = await makeOcrWorker();
+  try {
+    const { data } = await worker.recognize(file);
+    return (data?.text || "").trim();
+  } finally {
+    await worker.terminate();
+  }
 }
 
 async function docxToText(file: File): Promise<string> {
