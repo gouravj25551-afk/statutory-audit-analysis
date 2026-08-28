@@ -6,9 +6,7 @@
 const STEPS = [
   "Voucher",
   "Extract Facts",
-  "Compare with Policy 1",
-  "Compare with Policy 2",
-  "Compare with Policy 3",
+  "Compare with Each Policy",
   "Determine Applicable Policy",
   "Identify Applicable Clauses",
   "Test Voucher",

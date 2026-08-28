@@ -39,7 +39,7 @@ export default function UploadPage() {
       <div className="grid gap-5 lg:grid-cols-2">
         <DropCard
           title="Vouchers"
-          hint="Upload your voucher documents (e.g. 10 vouchers)."
+          hint="Upload your voucher documents — any number, no limit."
           onFiles={addVoucherFiles}
           kind="voucher"
         >
@@ -81,7 +81,7 @@ export default function UploadPage() {
 
         <DropCard
           title="Policies"
-          hint="Upload your policy documents (e.g. 3 policies)."
+          hint="Upload your policy documents — any number, no limit."
           onFiles={addPolicyFiles}
           kind="policy"
         >

@@ -24,7 +24,7 @@ export default function DashboardPage() {
         />
         <EmptyState
           title="No documents yet"
-          hint="Upload up to 10 vouchers and 3 policies. The engine will map each voucher to a policy and test it clause-by-clause — using nothing but the uploaded files."
+          hint="Upload any number of vouchers and policies — there is no limit. The engine will map each voucher to a policy and test it clause-by-clause — using nothing but the uploaded files."
           cta
         />
       </>
