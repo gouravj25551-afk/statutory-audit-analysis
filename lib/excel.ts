@@ -9,6 +9,7 @@
 
 import { aggregate } from "./aggregate";
 import { fmt } from "./engine";
+import { buildPolicyStudy } from "./policyStudy";
 import {
   CheckOutcome,
   PolicyDoc,
@@ -67,6 +68,7 @@ export async function buildAuditWorkbook(
   const agg = aggregate(vouchers, policies, analyses);
 
   buildExecutiveSummary(wb, ExcelJS, agg);
+  buildPolicyStudySheet(wb, ExcelJS, policies);
   buildMapping(wb, ExcelJS, rows, analyses);
   buildChecklist(wb, ExcelJS, rows, analyses);
   buildApproval(wb, ExcelJS, rows, analyses);
@@ -239,6 +241,48 @@ function buildExecutiveSummary(wb: any, ExcelJS: any, agg: ReturnType<typeof agg
   }
 
   ws.views = [{ state: "frozen", ySplit: 3 }];
+}
+
+// ---- Sheet 1b: Policy Study ----------------------------------------------
+
+function buildPolicyStudySheet(wb: any, ExcelJS: any, policies: PolicyDoc[]) {
+  const cols: Col[] = [
+    { header: "Policy", key: "pol", width: 26 },
+    { header: "Effective Date", key: "eff", width: 16 },
+    { header: "Study Section", key: "sec", width: 30 },
+    { header: "Requirement (as stated in the policy)", key: "req", width: 70 },
+    { header: "Reference", key: "ref", width: 18 },
+  ];
+  const data: Record<string, any>[] = [];
+  policies
+    .filter((p) => p.status === "extracted")
+    .forEach((p) => {
+      const study = buildPolicyStudy(p);
+      if (study.sections.length === 0) {
+        data.push({
+          pol: study.name,
+          eff: study.effectiveDate || "Not specified",
+          sec: "-",
+          req: "No structured requirements extracted from this document.",
+          ref: "-",
+        });
+        return;
+      }
+      let firstOfPolicy = true;
+      study.sections.forEach((s) => {
+        s.entries.forEach((e, i) => {
+          data.push({
+            pol: firstOfPolicy ? study.name : "",
+            eff: firstOfPolicy ? study.effectiveDate || "Not specified" : "",
+            sec: i === 0 ? s.title : "",
+            req: e.text,
+            ref: e.ref,
+          });
+          firstOfPolicy = false;
+        });
+      });
+    });
+  addTableSheet(wb, ExcelJS, "1b. Policy Study", cols, data);
 }
 
 // ---- Sheet 2: Voucher–Policy Mapping -------------------------------------
