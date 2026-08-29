@@ -1,10 +1,22 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { aggregate } from "@/lib/aggregate";
 import { buildChecklistRows, CHECKLIST_COLUMNS } from "@/lib/checklist";
+import { buildAuditWorkbook } from "@/lib/excel";
 import { EmptyState, PageHeader } from "@/components/ui";
+
+function downloadBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function toCsv(headers: string[], rows: string[][]): string {
   const esc = (s: string) => `"${(s ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
@@ -27,6 +39,26 @@ export default function ExportPage() {
   const { vouchers, policies, analyses } = useStore();
   const agg = useMemo(() => aggregate(vouchers, policies, analyses), [vouchers, policies, analyses]);
   const checklistRows = useMemo(() => buildChecklistRows(vouchers, analyses), [vouchers, analyses]);
+  const [xlsxBusy, setXlsxBusy] = useState(false);
+  const [xlsxError, setXlsxError] = useState<string | null>(null);
+
+  const generateWorkbook = async () => {
+    setXlsxBusy(true);
+    setXlsxError(null);
+    try {
+      // Built entirely from the existing `analyses` — no re-analysis, no AI.
+      const buffer = await buildAuditWorkbook(vouchers, policies, analyses);
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(`Audit-Working-Paper-${stamp}.xlsx`, blob);
+    } catch (e: any) {
+      setXlsxError(e?.message || "Could not generate the Excel workbook.");
+    } finally {
+      setXlsxBusy(false);
+    }
+  };
 
   if (checklistRows.length === 0) {
     return (
@@ -83,6 +115,38 @@ export default function ExportPage() {
         title="Export / Report"
         subtitle="Export the working papers as CSV or print a report. All content is generated from the uploaded documents."
       />
+
+      <section className="card mb-5 overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-brand-600 px-5 py-4">
+          <div className="min-w-0 text-white">
+            <h2 className="text-base font-semibold">Audit Working Paper (Excel)</h2>
+            <p className="mt-0.5 max-w-2xl text-[13px] text-brand-100">
+              One professional <strong>.xlsx</strong> — 7 sheets: Executive Summary, Voucher-Policy
+              Mapping, Detailed Audit Checklist (32 columns), Approval Verification, Clause-by-Clause
+              Testing, Observation Register and Evidence Matrix. Built directly from this analysis —
+              no copy-paste, no second AI pass.
+            </p>
+          </div>
+          <button
+            onClick={generateWorkbook}
+            disabled={xlsxBusy}
+            className="btn shrink-0 bg-white px-4 py-2.5 font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-70"
+          >
+            {xlsxBusy ? "Generating…" : "Generate Audit Working Paper"}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-5 py-3 text-xs text-slate-500">
+          <span>{checklistRows.length} voucher(s)</span>
+          <span>{agg.totalPolicies} polic{agg.totalPolicies === 1 ? "y" : "ies"}</span>
+          <span>{agg.totalObservations} observation(s)</span>
+          <span className="text-slate-400">Website result = Excel result (same structured data)</span>
+        </div>
+        {xlsxError && (
+          <div className="border-t border-rose-200 bg-rose-50 px-5 py-2 text-xs text-rose-700">
+            {xlsxError}
+          </div>
+        )}
+      </section>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card
