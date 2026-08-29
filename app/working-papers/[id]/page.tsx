@@ -228,6 +228,43 @@ function CheckCard({ title, c }: { title: string; c: CheckOutcome }) {
           <dt className="label">Voucher evidence</dt>
           <dd className="text-slate-700">{c.voucherEvidence}</dd>
         </div>
+        {c.requiredApprover != null && (
+          <div className="mt-1 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-2">
+            <div>
+              <dt className="label">Required approver</dt>
+              <dd className="text-slate-700">{c.requiredApprover}</dd>
+            </div>
+            <div>
+              <dt className="label">Actual approver</dt>
+              <dd className="text-slate-700">{c.actualApprover || "—"}</dd>
+            </div>
+            <div>
+              <dt className="label">Required / actual levels</dt>
+              <dd className="text-slate-700">
+                {(c.requiredLevels ?? "—")} / {(c.actualLevels ?? "—")}
+              </dd>
+            </div>
+            <div>
+              <dt className="label">Correct authority?</dt>
+              <dd>{c.correctAuthority ? <ResultBadge value={c.correctAuthority} /> : "—"}</dd>
+            </div>
+            {c.amountDrivesAuthority && (
+              <div className="col-span-2">
+                <dt className="label">Amount-driven authority</dt>
+                <dd className="text-slate-600">
+                  The required approver depends on the transaction amount per the policy&rsquo;s
+                  authority matrix.
+                </dd>
+              </div>
+            )}
+            {c.authorityBasis && (
+              <div className="col-span-2">
+                <dt className="label">Authority basis</dt>
+                <dd className="text-slate-600">{c.authorityBasis}</dd>
+              </div>
+            )}
+          </div>
+        )}
         {c.note && (
           <div>
             <dt className="label">Note</dt>

@@ -7,8 +7,9 @@
 // "Not evidenced" / "Cannot Determine" outcome instead of guessing.
 // ---------------------------------------------------------------------------
 
-import { newId } from "./extract";
+import { newId, rolesIn } from "./extract";
 import {
+  AuthorityRule,
   CheckOutcome,
   ClauseTest,
   EvidenceRef,
@@ -131,52 +132,195 @@ function amountCheck(v: VoucherDoc, reqs: PolicyRequirement[]): CheckOutcome {
   };
 }
 
-function approvalCheck(v: VoucherDoc, reqs: PolicyRequirement[]): CheckOutcome {
+// Words describing what the voucher transaction actually is — used to match
+// the voucher to the right row of the policy's approval-authority matrix.
+function categoryWords(v: VoucherDoc): Set<string> {
+  const src =
+    (v.fields.description || "") + " " + (v.fields.nature || "") + " " + v.text.slice(0, 700);
+  const out = new Set<string>();
+  for (const w of src.toLowerCase().match(/[a-z][a-z]{3,}/g) || []) out.add(w);
+  return out;
+}
+
+// Count how many independent approval sign-offs the voucher evidences
+// (Approved by / Verified by / Checked by / Authorised signatory / Sanctioned).
+function countSignoffs(text: string): number {
+  const t = text.toLowerCase();
+  let n = 0;
+  for (const re of [
+    /approved by/,
+    /verified by/,
+    /checked by/,
+    /authori[sz]ed signatory/,
+    /sanctioned by/,
+    /counter-?signed/,
+  ]) {
+    if (re.test(t)) n += 1;
+  }
+  return n;
+}
+
+// Choose the authority-matrix row that best fits this voucher.
+function matchAuthorityRule(v: VoucherDoc, rules: AuthorityRule[]): AuthorityRule | null {
+  if (!rules || rules.length === 0) return null;
+  const words = categoryWords(v);
+  let best: AuthorityRule | null = null;
+  let bestScore = 0;
+  for (const r of rules) {
+    let score = 0;
+    for (const k of r.keywords) if (words.has(k)) score += 1;
+    for (const lw of (r.label.toLowerCase().match(/[a-z]{4,}/g) || []))
+      if (words.has(lw)) score += 1;
+    if (score > bestScore) {
+      bestScore = score;
+      best = r;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
+function rolesSatisfied(required: string[], actual: string[]): boolean {
+  if (required.length === 0) return true;
+  const set = new Set(actual.map((r) => r.toLowerCase()));
+  return required.some((r) => set.has(r.toLowerCase()));
+}
+
+function approvalCheck(
+  v: VoucherDoc,
+  reqs: PolicyRequirement[],
+  rules: AuthorityRule[] = []
+): CheckOutcome {
   const req = reqs.find((r) => r.type === "approval");
-  if (!req) {
+  const rule = matchAuthorityRule(v, rules);
+
+  // Nothing in the policy requires approval for this voucher.
+  if (!req && !rule) {
     return {
       applicable: false,
       requirement: "Approval requirement not specified in the provided policy.",
       clause: "-",
-      voucherEvidence: v.fields.approver
-        ? `Approved by: ${v.fields.approver}`
-        : "No approval detail in voucher.",
+      voucherEvidence: v.fields.approver ? `Approved by: ${v.fields.approver}` : "No approval detail in voucher.",
       result: "Not Applicable",
+      requiredApprover: "Not specified in the provided documents.",
+      actualApprover: v.fields.approver || "Not evidenced in the provided voucher.",
+      correctAuthority: "Not Applicable",
     };
   }
-  if (!v.fields.approver) {
+
+  // Required designation(s): from the matched authority row (amount-banded if
+  // the row is value-dependent), else any designation named in the approval line.
+  let requiredRoles: string[] = [];
+  let amountDrives = false;
+  let basis = req ? `${req.clause}` : "";
+  if (rule) {
+    basis = `${rule.label} (${rule.clause})`;
+    if (rule.bands.length > 0 && v.fields.amount != null) {
+      amountDrives = true;
+      const band = rule.bands.find(
+        (b) =>
+          (b.minAmount == null || v.fields.amount! > b.minAmount) &&
+          (b.maxAmount == null || v.fields.amount! <= b.maxAmount)
+      );
+      requiredRoles = band ? band.roles : rule.roles;
+    } else {
+      requiredRoles = rule.roles;
+      amountDrives = rule.bands.length > 0;
+    }
+  }
+  if (requiredRoles.length === 0 && req) requiredRoles = rolesIn(req.raw);
+
+  const requiredLevels = rule ? rule.levels : requiredRoles.length > 1 ? requiredRoles.length : 1;
+  const priorApprovalRequired =
+    /(prior|advance|before (?:the )?(?:transaction|payment|purchase|commitment))/i.test(
+      (req?.raw || "") + " " + (rule?.raw || "")
+    );
+
+  const actualApprover = v.fields.approver || "";
+  const actualRoles = rolesIn(actualApprover);
+  const actualLevels = Math.max(countSignoffs(v.text), actualApprover ? 1 : 0);
+
+  const requiredLabel =
+    requiredRoles.length > 0 ? requiredRoles.join(" / ") : "Approval required (designation not specified in policy)";
+
+  // No approver recorded on the voucher.
+  if (!actualApprover) {
     return {
       applicable: true,
-      requirement: `${req.raw} (${req.clause})`,
-      clause: req.clause,
+      requirement: `Approval by ${requiredLabel}${requiredLevels > 1 ? ` — ${requiredLevels} levels` : ""}${basis ? ` [${basis}]` : ""}`,
+      clause: rule?.clause || req?.clause || "-",
       voucherEvidence: "Approval cannot be verified from the provided voucher.",
       result: "Cannot Determine",
-      note: "Requirement exists in policy, but voucher provides no approval evidence.",
+      note: "Policy requires approval, but the voucher provides no named approver to test against the required authority.",
+      requiredApprover: requiredLabel,
+      actualApprover: "Not evidenced in the provided voucher.",
+      requiredLevels,
+      actualLevels,
+      correctAuthority: "Cannot Determine",
+      authorityBasis: basis || undefined,
+      amountDrivesAuthority: amountDrives,
+      priorApprovalRequired,
     };
   }
-  // Designation matching: if the policy names a designation, check the voucher
-  // contains it. Otherwise we can only confirm an approver is present.
-  const desig = req.raw.match(/\b(manager|director|head|cfo|ceo|md|partner|hod|supervisor|finance|accountant|officer)\b/i);
-  if (desig) {
-    const present = new RegExp(desig[0], "i").test(v.fields.approver);
+
+  // Policy names an approver but the voucher lists a name without a designation.
+  if (requiredRoles.length > 0 && actualRoles.length === 0) {
     return {
       applicable: true,
-      requirement: `Approval by "${desig[0]}" (${req.clause})`,
-      clause: req.clause,
-      voucherEvidence: `Approved by: ${v.fields.approver}`,
-      result: present ? "Compliant" : "Non-Compliant",
-      note: present
-        ? undefined
-        : `${req.clause} requires approval by "${desig[0]}", whereas the voucher shows approver "${v.fields.approver}".`,
+      requirement: `Approval by ${requiredLabel}${basis ? ` [${basis}]` : ""}`,
+      clause: rule?.clause || req?.clause || "-",
+      voucherEvidence: `Approved by: ${actualApprover}`,
+      result: "Cannot Determine",
+      note: `${basis || "The policy"} requires approval by ${requiredLabel}; the voucher records approver "${actualApprover}" but states no designation, so the authority cannot be confirmed from the documents.`,
+      requiredApprover: requiredLabel,
+      actualApprover,
+      requiredLevels,
+      actualLevels,
+      correctAuthority: "Cannot Determine",
+      authorityBasis: basis || undefined,
+      amountDrivesAuthority: amountDrives,
+      priorApprovalRequired,
     };
   }
+
+  // Policy specifies no designation — we can only confirm an approver exists.
+  if (requiredRoles.length === 0) {
+    return {
+      applicable: true,
+      requirement: `${req ? req.raw : "Approval required"}${req ? ` (${req.clause})` : ""}`,
+      clause: req?.clause || rule?.clause || "-",
+      voucherEvidence: `Approved by: ${actualApprover}`,
+      result: "Compliant",
+      note: "Policy requires approval and the voucher records an approver; the policy does not name a required designation.",
+      requiredApprover: "Approval required (designation not specified in policy).",
+      actualApprover,
+      requiredLevels,
+      actualLevels,
+      correctAuthority: "Cannot Determine",
+      authorityBasis: basis || undefined,
+      amountDrivesAuthority: amountDrives,
+      priorApprovalRequired,
+    };
+  }
+
+  // Full designation comparison.
+  const ok = rolesSatisfied(requiredRoles, actualRoles);
   return {
     applicable: true,
-    requirement: `${req.raw} (${req.clause})`,
-    clause: req.clause,
-    voucherEvidence: `Approved by: ${v.fields.approver}`,
-    result: "Compliant",
-    note: "Policy requires approval; voucher records an approver. Designation not specified in policy.",
+    requirement: `Approval by ${requiredLabel}${requiredLevels > 1 ? ` — ${requiredLevels} levels` : ""}${basis ? ` [${basis}]` : ""}`,
+    clause: rule?.clause || req?.clause || "-",
+    voucherEvidence: `Approved by: ${actualApprover} (designation${actualRoles.length > 1 ? "s" : ""}: ${actualRoles.join(", ")})`,
+    result: ok ? "Compliant" : "Non-Compliant",
+    note: ok
+      ? undefined
+      : `${basis || "The policy"} requires approval by ${requiredLabel}, whereas the voucher's approver is "${actualApprover}" (${actualRoles.join(", ")}). The required authority is not evidenced.`,
+    requiredApprover: requiredLabel,
+    actualApprover,
+    requiredLevels,
+    actualLevels,
+    correctAuthority: ok ? "Compliant" : "Non-Compliant",
+    authorityBasis: basis || undefined,
+    amountDrivesAuthority: amountDrives,
+    priorApprovalRequired,
   };
 }
 
@@ -320,7 +464,7 @@ function clauseTests(v: VoucherDoc, policy: PolicyDoc): ClauseTest[] {
         outcome = amountCheck(v, [req]);
         break;
       case "approval":
-        outcome = approvalCheck(v, [req]);
+        outcome = approvalCheck(v, [req], policy.authorityRules);
         break;
       case "timing":
         outcome = timingCheck(v, [req]);
@@ -440,7 +584,7 @@ export function analyseVoucher(
 
   const reqs = applicable?.requirements || [];
   const amount = amountCheck(v, reqs);
-  const approval = approvalCheck(v, reqs);
+  const approval = approvalCheck(v, reqs, applicable?.authorityRules || []);
   const timing = timingCheck(v, reqs);
   const supporting = supportingCheck(v, reqs);
   const eligibility = eligibilityCheck(v, reqs);

@@ -90,6 +90,29 @@ export interface PolicyDoc {
   scope?: string;
   keywords: string[]; // distinctive vocabulary of the whole policy
   requirements: PolicyRequirement[];
+  authorityRules: AuthorityRule[]; // parsed signatory / approval-authority matrix
+}
+
+// A single row of an approval-authority ("signatory") matrix found in a policy:
+// e.g. "Office & Warehouse Leases → MD", or a value-banded rule
+// "Purchase Request: up to 40,000 → Managers; over 800,000 → MD".
+export interface AuthorityRule {
+  id: string;
+  label: string; // the document / action the rule governs
+  keywords: string[]; // words used to match this rule to a voucher
+  roles: string[]; // required approver designation(s), canonicalised
+  levels: number; // number of distinct approval levels the rule states
+  bands: AuthorityBand[]; // value-dependent authority, if any
+  raw: string;
+  clause: string;
+  lineIndex: number;
+}
+
+export interface AuthorityBand {
+  minAmount?: number;
+  maxAmount?: number;
+  roles: string[];
+  raw: string;
 }
 
 // ---- Analysis output ------------------------------------------------------
@@ -121,6 +144,16 @@ export interface CheckOutcome {
   voucherEvidence: string; // what the voucher shows (or "not evidenced")
   result: Result;
   note?: string;
+
+  // --- richer approval-authority reasoning (populated for approvalCheck) ---
+  requiredApprover?: string; // designation(s) the policy requires, human-readable
+  actualApprover?: string; // approver named on the voucher
+  requiredLevels?: number; // approval levels the policy states
+  actualLevels?: number; // approval sign-offs evidenced on the voucher
+  correctAuthority?: Result; // was the correct designation involved?
+  authorityBasis?: string; // which authority-matrix row / clause drove this
+  amountDrivesAuthority?: boolean; // does the amount change the required approver?
+  priorApprovalRequired?: boolean; // must approval precede the transaction?
 }
 
 export type MissingKind =

@@ -341,10 +341,16 @@ function buildChecklist(
       amreq: a.amountCheck.applicable ? a.amountCheck.requirement : "No amount limit specified in the provided policy.",
       amres: a.amountCheck.result,
       aprq: a.approvalCheck.applicable ? "Yes" : "Approval requirement not specified in the provided policy.",
-      reqapp: a.approvalCheck.applicable ? a.approvalCheck.requirement : NS,
-      actapp: f.approver || "Approval cannot be verified from the provided voucher.",
-      reqlvl: NS,
-      actlvl: f.approver ? "Single approver recorded on voucher" : NS,
+      reqapp: a.approvalCheck.applicable
+        ? a.approvalCheck.requiredApprover || a.approvalCheck.requirement
+        : NS,
+      actapp: a.approvalCheck.actualApprover || f.approver || "Approval cannot be verified from the provided voucher.",
+      reqlvl: a.approvalCheck.applicable && a.approvalCheck.requiredLevels
+        ? `${a.approvalCheck.requiredLevels} level(s)`
+        : NS,
+      actlvl: a.approvalCheck.actualLevels
+        ? `${a.approvalCheck.actualLevels} sign-off(s) on voucher`
+        : "Not evidenced in the provided voucher.",
       reqtim: a.timingCheck.applicable ? a.timingCheck.requirement : "No applicable timing requirement specified in the provided policy.",
       acttim: f.approvalDate || datesOf(v),
       apres: a.approvalCheck.result,
@@ -405,17 +411,24 @@ function buildApproval(
     const ev = f.approver
       ? `Approved by: ${f.approver}${f.approvalDate ? ` on ${f.approvalDate}` : ""}`
       : "Approval cannot be verified from the provided voucher.";
+    const reqTiming = ap.priorApprovalRequired
+      ? "Prior approval required (before the transaction)"
+      : tc.applicable
+      ? tc.requirement
+      : "No applicable timing requirement specified in the provided policy.";
     return {
       v: f.voucherNo || v.fileName,
       pol: a.applicablePolicyName || CND,
-      req: ap.applicable ? "Yes" : "Approval requirement not specified in the provided policy.",
-      reqapp: ap.applicable ? ap.requirement : NS,
-      actapp: f.approver || "Not evidenced in the provided voucher.",
-      reqlvl: NS,
-      actlvl: f.approver ? "Single approver recorded" : NS,
-      reqtim: tc.applicable ? tc.requirement : "No applicable timing requirement specified in the provided policy.",
+      req: ap.applicable
+        ? (ap.amountDrivesAuthority ? "Yes (approver depends on amount)" : "Yes")
+        : "Approval requirement not specified in the provided policy.",
+      reqapp: ap.applicable ? ap.requiredApprover || ap.requirement : NS,
+      actapp: ap.actualApprover || f.approver || "Not evidenced in the provided voucher.",
+      reqlvl: ap.applicable && ap.requiredLevels ? `${ap.requiredLevels} level(s)` : NS,
+      actlvl: ap.actualLevels ? `${ap.actualLevels} sign-off(s)` : "Not evidenced",
+      reqtim: reqTiming,
       acttim: f.approvalDate || datesOf(v),
-      auth: ap.applicable ? ap.result : "Not Applicable",
+      auth: ap.applicable ? ap.correctAuthority || ap.result : "Not Applicable",
       tim: tc.applicable ? tc.result : "Not Applicable",
       ev,
       conc: a.finalConclusion,

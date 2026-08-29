@@ -9,6 +9,8 @@
 // ---------------------------------------------------------------------------
 
 import {
+  AuthorityBand,
+  AuthorityRule,
   EvidenceRef,
   PolicyDoc,
   PolicyRequirement,
@@ -420,5 +422,178 @@ export function parsePolicy(
     scope: scopeHit?.value,
     keywords: keywordsOf(text),
     requirements,
+    authorityRules: parseAuthorityRules(lines),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Approval-authority ("signatory matrix") parsing.
+//
+// Recognises designations mentioned in a policy and pairs them with the
+// document / action they govern, so the engine can later ask "who did the
+// policy require to approve THIS voucher, and did that authority actually
+// sign?". Purely text recognition — it adds no requirement of its own.
+// ---------------------------------------------------------------------------
+
+// Designation lexicon. Ordered most-specific first so "Managing Director" is
+// matched before the generic "Director"/"Manager". Recognition only.
+const ROLE_LEXICON: { canon: string; re: RegExp }[] = [
+  { canon: "Managing Director", re: /\bmanaging director\b|\bm\.?d\.?\b/i },
+  { canon: "Project Director", re: /\bproject director\b|\bp\.?d\.?\b/i },
+  { canon: "Associate Director", re: /\bassociate director\b/i },
+  { canon: "Director – F&O", re: /\bd[-–\s]?f\s*&?\s*o\b|director\s*[–-]\s*f\s*&?\s*o|finance and operations/i },
+  { canon: "Director", re: /\bdirector(?:\/s)?\b/i },
+  { canon: "Finance Manager", re: /\bfinance manager\b|\bf\.?m\.?\b|manager[,\s-]*f\s*&?\s*a\b|f\s*&?\s*a manager/i },
+  { canon: "HR Manager", re: /\bhr manager\b/i },
+  { canon: "CFO", re: /\bcfo\b|chief financial officer/i },
+  { canon: "CEO", re: /\bceo\b|chief executive officer/i },
+  { canon: "Contract Manager", re: /\bcontract manager\b/i },
+  { canon: "Team Lead", re: /\bteam lead(?:s)?\b/i },
+  { canon: "Supervisor", re: /\b(?:direct )?supervisor\b/i },
+  { canon: "Head of Department", re: /\bhead of department\b|\bhod\b|department head\b/i },
+  { canon: "Partner", re: /\bpartner\b/i },
+  { canon: "Manager", re: /\bmanager(?:s)?\b/i },
+  { canon: "Accountant", re: /\baccountant\b/i },
+  { canon: "Officer", re: /\bofficer\b/i },
+  { canon: "Coordinator", re: /\bcoordinator\b/i },
+  { canon: "Authorised Signatory", re: /\bauthori[sz]ed signatory\b/i },
+];
+
+// Return the distinct canonical designations mentioned in a piece of text.
+export function rolesIn(text: string): string[] {
+  if (!text) return [];
+  let work = " " + text + " ";
+  const found: string[] = [];
+  for (const { canon, re } of ROLE_LEXICON) {
+    const m = work.match(re);
+    if (m) {
+      found.push(canon);
+      // mask the matched span so a generic pattern can't re-match it
+      work = work.replace(re, " ".repeat(m[0].length));
+    }
+  }
+  return [...new Set(found)];
+}
+
+const AUTHORITY_HEADER =
+  /(signatory (?:policy|authority)|value threshold|approval (?:matrix|authority)|authorisation matrix|authorization matrix|delegation of authority|approval limits)/i;
+
+// Parse value bands like "up to Rs 40,000", "over INR 8,00,000", "exceeding 40,00,000".
+function parseBand(line: string, roles: string[]): AuthorityBand | null {
+  const low = line.toLowerCase();
+  const amt = parseAmount(line);
+  if (!amt) return null;
+  const band: AuthorityBand = { roles, raw: line };
+  if (/\b(up to|upto|not exceeding|less than|below|maximum of)\b/.test(low)) band.maxAmount = amt.value;
+  else if (/\b(over|above|exceeding|more than|greater than)\b/.test(low)) band.minAmount = amt.value;
+  else band.maxAmount = amt.value;
+  return band;
+}
+
+function parseAuthorityRules(lines: string[]): AuthorityRule[] {
+  const rules: AuthorityRule[] = [];
+  // Locate signatory/authority sections; if none flagged, still scan lines that
+  // clearly pair an action with a designation.
+  const headerIdx: number[] = [];
+  lines.forEach((l, i) => {
+    if (AUTHORITY_HEADER.test(l)) headerIdx.push(i);
+  });
+
+  const inSection = (i: number) =>
+    headerIdx.length === 0 ||
+    headerIdx.some((h) => i >= h && i <= h + 80); // matrices are long tables
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!inSection(i)) continue;
+    const l = lines[i];
+    // A candidate row: mentions a designation AND reads like an action/label,
+    // OR contains a value band with a role nearby.
+    const roles = rolesIn(l);
+    const hasActionish =
+      /(lease|renewal|agreement|mou|purchase|order|requisition|payment|voucher|cheque|check|transfer|bank|contract|advance|expense|reimburse|procure|subaward|subcontract|travel|invoice|writeoff|write-off|disposal|budget)/i.test(
+        l
+      );
+    if (roles.length === 0 && !/\b(up to|over|exceeding|above|not exceeding)\b/i.test(l)) continue;
+
+    // Prefer designation(s) on the same line as the action; only look ahead
+    // when the row itself names none (extracted PDF tables sometimes wrap the
+    // role onto the next line). This avoids absorbing the next matrix row.
+    const windowLines = [l, lines[i + 1] || "", lines[i + 2] || ""];
+    const sameLineRoles = rolesIn(l);
+    const windowRoles =
+      sameLineRoles.length > 0
+        ? sameLineRoles
+        : [...new Set([rolesIn(lines[i + 1] || ""), rolesIn(lines[i + 2] || "")].flat())];
+    if (windowRoles.length === 0) continue;
+    if (!hasActionish && !AUTHORITY_HEADER.test(lines[headerIdx.find((h) => i >= h) ?? -1] || "")) {
+      // Without an action word and outside an explicit matrix, skip generic mentions.
+      if (headerIdx.length === 0) continue;
+    }
+
+    // Value bands are taken ONLY from the rule's own line, so a neighbouring
+    // matrix row's thresholds cannot bleed into this rule.
+    const bands: AuthorityBand[] = [];
+    if (/\b(up to|upto|over|above|exceeding|not exceeding|less than)\b/i.test(l)) {
+      const b = parseBand(l, rolesIn(l));
+      if (b && b.roles.length) bands.push(b);
+    }
+
+    const label = l.replace(/\s{2,}/g, " ").replace(/\bn\/a\b/i, "").trim().slice(0, 90);
+    // Levels: count distinct roles joined by "and"/"with"/"&" in the row window.
+    const joined = windowLines.join(" ");
+    const levels = /\b(and|with|then|followed by|&)\b/i.test(joined) && windowRoles.length > 1
+      ? Math.min(windowRoles.length, 3)
+      : 1;
+
+    rules.push({
+      id: newId("auth"),
+      label: label || windowRoles.join(", "),
+      keywords: keywordsOf(windowLines.join(" ")),
+      roles: windowRoles,
+      levels,
+      bands,
+      raw: l,
+      clause: clauseOf(l, i),
+      lineIndex: i,
+    });
+  }
+
+  // Merge rows that govern the SAME action (e.g. a "Purchase Request" whose
+  // value bands are split across several lines) so their bands/roles combine.
+  const byAction = new Map<string, AuthorityRule>();
+  const standalone: AuthorityRule[] = [];
+  for (const r of rules) {
+    const key = actionKey(r.label);
+    if (key.length < 4) {
+      standalone.push(r);
+      continue;
+    }
+    const existing = byAction.get(key);
+    if (!existing) {
+      byAction.set(key, { ...r, roles: [...r.roles], bands: [...r.bands] });
+    } else {
+      existing.roles = [...new Set([...existing.roles, ...r.roles])];
+      existing.bands = [...existing.bands, ...r.bands];
+      existing.levels = Math.max(existing.levels, r.levels);
+      existing.keywords = [...new Set([...existing.keywords, ...r.keywords])];
+    }
+  }
+  return [...byAction.values(), ...standalone];
+}
+
+// A stable key for the action a rule governs — strips value bands, amounts and
+// designation words so different bands of the same action collapse together.
+function actionKey(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/\b(up to|upto|over|above|exceeding|not exceeding|less than|any value|any amount|n\/a)\b/g, " ")
+    .replace(/(rs\.?|inr|₹)\s*[0-9,]+/g, " ")
+    .replace(/\b[0-9][0-9,]*\b/g, " ")
+    .replace(
+      /\b(managing director|project director|associate director|contract manager|director|finance manager|manager|supervisor|team lead|cfo|ceo|hod|officer|coordinator|accountant|partner|authori[sz]ed signatory|md|pd|fm|f&o|hr)\b/g,
+      " "
+    )
+    .replace(/[^a-z ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
